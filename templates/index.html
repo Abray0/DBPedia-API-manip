@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DBPedia Search</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .search-container {
+            margin-bottom: 20px;
+        }
+        .search-input {
+            padding: 8px;
+            width: 300px;
+            margin-right: 10px;
+        }
+        .search-button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .result-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .pagination button {
+            padding: 8px 12px;
+            margin: 0 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .pagination button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .page-number {
+            margin: 0 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>DBPedia Search</h1>
+    
+    <div class="search-container">
+        <input type="text" id="searchInput" class="search-input" placeholder="Enter search term...">
+        <button onclick="search()" class="search-button">Search</button>
+    </div>
+
+    <div id="loader" class="loader" style="display: none;"></div>
+
+    <div id="pagination-top" class="pagination" style="display: none;"></div>
+    <div id="results"></div>
+    <div id="pagination-bottom" class="pagination" style="display: none;"></div>
+
+    <script>
+        let currentPage = 1;
+        let resultsPerPage = 7;
+        let allResults = [];
+
+        async function search() {
+            const searchTerm = document.getElementById('searchInput').value;
+            const resultsDiv = document.getElementById('results');
+            const loader = document.getElementById('loader');
+            const paginationTopDiv = document.getElementById('pagination-top');
+            const paginationBottomDiv = document.getElementById('pagination-bottom');
+            
+            if (!searchTerm) {
+                resultsDiv.innerHTML = '<p class="error">Please enter a search term</p>';
+                return;
+            }
+
+            // Show loader and clear previous results
+            loader.style.display = 'block';
+            resultsDiv.innerHTML = '';
+            paginationTopDiv.style.display = 'none';
+            paginationBottomDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query: searchTerm })
+                });
+
+                const data = await response.json();
+                loader.style.display = 'none';
+
+                if (data.error) {
+                    resultsDiv.innerHTML = `<p class="error">${data.error}</p>`;
+                    return;
+                }
+
+                if (data.results.length === 0) {
+                    resultsDiv.innerHTML = '<p>No results found</p>';
+                    return;
+                }
+
+                // Store all results and reset pagination
+                allResults = data.results;
+                currentPage = 1;
+                displayResults();
+                setupPagination();
+            } catch (error) {
+                loader.style.display = 'none';
+                resultsDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        }
+
+        function displayResults() {
+            const resultsDiv = document.getElementById('results');
+            const startIndex = (currentPage - 1) * resultsPerPage;
+            const endIndex = startIndex + resultsPerPage;
+            const resultsToDisplay = allResults.slice(startIndex, endIndex);
+
+            resultsDiv.innerHTML = resultsToDisplay.map(result => `
+                <div class="result-item">
+                    <h3><a href="${result.uri}" target="_blank">${result.label}</a></h3>
+                    <p>${result.description}</p>
+                </div>
+            `).join('');
+        }
+
+        function setupPagination() {
+            const paginationTopDiv = document.getElementById('pagination-top');
+            const paginationBottomDiv = document.getElementById('pagination-bottom');
+            const totalPages = Math.ceil(allResults.length / resultsPerPage);
+
+            const paginationContent = `
+                <button onclick="changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>
+                <span class="page-number">Page ${currentPage} of ${totalPages}</span>
+                <button onclick="changePage(1)" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
+            `;
+
+            paginationTopDiv.innerHTML = paginationContent;
+            paginationBottomDiv.innerHTML = paginationContent;
+
+            paginationTopDiv.style.display = 'flex';
+            paginationBottomDiv.style.display = 'flex';
+        }
+
+        function changePage(direction) {
+            const totalPages = Math.ceil(allResults.length / resultsPerPage);
+            currentPage += direction;
+
+            if (currentPage < 1) currentPage = 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+
+            displayResults();
+            setupPagination();
+        }
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                search();
+            }
+        });
+    </script>
+</body>
+</html>
